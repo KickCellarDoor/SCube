@@ -539,7 +539,7 @@ class BaseModel(pl.LightningModule):
                 batch[DS.GT_SEMANTIC] = generated_semantics
 
             batch.pop(DS.INPUT_PC_RAW)
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
 
     @staticmethod
     def generate_latent_semantic_on_the_fly(batch, latent_grid):

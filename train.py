@@ -34,7 +34,12 @@ from pytorch_lightning.plugins.training_type.dp import DataParallelPlugin
 from pytorch_lightning.utilities import rank_zero_only
 from pytorch_lightning.utilities.exceptions import MisconfigurationException
 from torch.nn import DataParallel
+# The flag below controls whether to allow TF32 on matmul. This flag defaults to False
+# in PyTorch 1.12 and later.
+torch.backends.cuda.matmul.allow_tf32 = True
 
+# The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
+torch.backends.cudnn.allow_tf32 = True
 from scube.utils import wandb_util
 
 if version.parse(pl.__version__) > version.parse('1.8.0'):
@@ -185,7 +190,7 @@ if __name__ == '__main__':
         if not os.path.exists(program_args.wandb_base):
             os.makedirs(program_args.wandb_base)
             
-        WANDB_USER_NAME = 'nvidia-toronto'
+        WANDB_USER_NAME = 'kickcellardoor-university-of-waterloo'
         wname = program_args.wname
         sep_pos = str(model_args.name).find('/')
         project_name = model_args.name[:sep_pos]

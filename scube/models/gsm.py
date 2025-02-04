@@ -161,7 +161,7 @@ class Model(BaseModel):
         self.log('val_loss' if is_val else 'train_loss/sum', loss_sum)
         self.log('val_step', self.global_step)
 
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
 
         return loss_sum
 
@@ -244,7 +244,7 @@ class Model(BaseModel):
 
     def val_dataloader(self):
         val_set = self.val_dataset()
-        return DataLoader(val_set, batch_size=self.hparams.batch_size,
+        return DataLoader(val_set, batch_size=self.hparams.batch_size_val,
                           num_workers=0, collate_fn=self.get_collate_fn())
     
     def test_dataset(self):

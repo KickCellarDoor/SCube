@@ -30,7 +30,7 @@ def color_from_points(target_pcs, ref_pcs, ref_colors, k=8):
 def semantic_from_points(target_pcs, ref_pcs, ref_semantic):
     if target_pcs.shape[0] == 0:
         return torch.zeros((0), dtype=torch.int64, device=target_pcs.device)
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
     dist, idx = common.knn_query_fast(target_pcs.contiguous(), ref_pcs.contiguous(), 1)
     dist = dist.sqrt()
 
