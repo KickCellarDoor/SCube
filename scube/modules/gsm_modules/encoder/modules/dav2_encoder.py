@@ -10,7 +10,8 @@ import torch
 import torch.nn as nn
 
 from scube.data.base import DatasetSpec as DS
-from rec_utils.depth_utils import get_depth_from_voxel, align_inv_depth_to_depth
+# from rec_utils.depth_utils import get_depth_from_voxel, align_inv_depth_to_depth
+from scube.utils.voxel_util import get_distance_from_voxel
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 from scube.modules.basic_modules import ResBlock as ResBlock2D
 from scube.modules.gsm_modules.encoder.modules.depth_anything_v2_hf import DepthAnythingForDepthEstimation
@@ -96,66 +97,66 @@ class DAV2Encoder(nn.Module):
 
         return high_level_feature
 
-    @staticmethod
-    def get_voxel_depth(batch, is_input=False):
-        # voxel rendered depth
-        B = batch[DS.INPUT_PC].grid_count
+    # @staticmethod
+    # def get_voxel_depth(batch, is_input=False):
+    #     # voxel rendered depth
+    #     B = batch[DS.INPUT_PC].grid_count
 
-        voxel_rendered_depth_list = []
-        if is_input:
-            for b in range(B):
-                voxel_rendered_depth = get_depth_from_voxel(
-                    batch[DS.IMAGES_INPUT_POSE][b],
-                    batch[DS.IMAGES_INPUT_INTRINSIC][b],
-                    batch[DS.INPUT_PC][b]
-                )
+    #     voxel_rendered_depth_list = []
+    #     if is_input:
+    #         for b in range(B):
+    #             voxel_rendered_depth = get_depth_from_voxel(
+    #                 batch[DS.IMAGES_INPUT_POSE][b],
+    #                 batch[DS.IMAGES_INPUT_INTRINSIC][b],
+    #                 batch[DS.INPUT_PC][b]
+    #             )
             
-                voxel_rendered_depth_list.append(voxel_rendered_depth)
-        else:
-            for b in range(B):
-                voxel_rendered_depth = get_depth_from_voxel(
-                    batch[DS.IMAGES_POSE][b],
-                    batch[DS.IMAGES_INTRINSIC][b],
-                    batch[DS.INPUT_PC][b]
-                )
+    #             voxel_rendered_depth_list.append(voxel_rendered_depth)
+    #     else:
+    #         for b in range(B):
+    #             voxel_rendered_depth = get_depth_from_voxel(
+    #                 batch[DS.IMAGES_POSE][b],
+    #                 batch[DS.IMAGES_INTRINSIC][b],
+    #                 batch[DS.INPUT_PC][b]
+    #             )
 
-                voxel_rendered_depth_list.append(voxel_rendered_depth)
+    #             voxel_rendered_depth_list.append(voxel_rendered_depth)
                 
-        # [B, N, H, W, 1]
-        voxel_rendered_depth = torch.stack(voxel_rendered_depth_list, dim=0)
+    #     # [B, N, H, W, 1]
+    #     voxel_rendered_depth = torch.stack(voxel_rendered_depth_list, dim=0)
 
-        return voxel_rendered_depth
+    #     return voxel_rendered_depth
 
-    @staticmethod
-    def rectify_depth_anything_v2_depth_inv(batch):
-        """
-        align the depth-anything v2 inverse depth to voxel rendered depth
+    # @staticmethod
+    # def rectify_depth_anything_v2_depth_inv(batch):
+    #     """
+    #     align the depth-anything v2 inverse depth to voxel rendered depth
         
-        Note that the voxel depth is very inaccurate. So the aligned depth is also inaccurate.
-        """
-        voxel_rendered_depth = DAV2Encoder.get_voxel_depth(batch)
+    #     Note that the voxel depth is very inaccurate. So the aligned depth is also inaccurate.
+    #     """
+    #     voxel_rendered_depth = DAV2Encoder.get_voxel_depth(batch)
 
-        # reference depth, [B, N, H, W, 1]
-        source_inv_depth = torch.stack(batch[DS.IMAGES_INPUT_DEPTH])
+    #     # reference depth, [B, N, H, W, 1]
+    #     source_inv_depth = torch.stack(batch[DS.IMAGES_INPUT_DEPTH])
 
-        images_input_mask = torch.stack(batch[DS.IMAGES_INPUT_MASK])
-        foreground_mask_from_seg = images_input_mask[..., 0:1].float()
-        foreground_mask_from_grid = images_input_mask[..., 3:4].float()
+    #     images_input_mask = torch.stack(batch[DS.IMAGES_INPUT_MASK])
+    #     foreground_mask_from_seg = images_input_mask[..., 0:1].float()
+    #     foreground_mask_from_grid = images_input_mask[..., 3:4].float()
 
-        # if we come here, we must model the mid-ground
-        close_range = foreground_mask_from_seg * foreground_mask_from_grid
-        mid_ground = foreground_mask_from_seg - close_range
-        mask_for_align = close_range * (source_inv_depth > 0) * (voxel_rendered_depth > 0)
+    #     # if we come here, we must model the mid-ground
+    #     close_range = foreground_mask_from_seg * foreground_mask_from_grid
+    #     mid_ground = foreground_mask_from_seg - close_range
+    #     mask_for_align = close_range * (source_inv_depth > 0) * (voxel_rendered_depth > 0)
 
-        # rectified depth anything v2 inverse depth to voxel rendered inverse depth
-        B, N, H, W = source_inv_depth.shape[:4]
+    #     # rectified depth anything v2 inverse depth to voxel rendered inverse depth
+    #     B, N, H, W = source_inv_depth.shape[:4]
 
-        voxel_rendered_depth = voxel_rendered_depth.view(B*N, H, W)
-        mask_for_align = mask_for_align.view(B*N, H, W)
-        source_inv_depth = source_inv_depth.view(B*N, H, W)
-        rectified_depth = [align_inv_depth_to_depth(source_inv_depth[i], voxel_rendered_depth[i], mask_for_align[i]) for i in range(B*N)]
-        rectified_depth = torch.stack(rectified_depth)
-        rectified_depth = torch.where(source_inv_depth > 0, rectified_depth, 0)
-        rectified_depth = rectified_depth.view(B, N, H, W, 1)
+    #     voxel_rendered_depth = voxel_rendered_depth.view(B*N, H, W)
+    #     mask_for_align = mask_for_align.view(B*N, H, W)
+    #     source_inv_depth = source_inv_depth.view(B*N, H, W)
+    #     rectified_depth = [align_inv_depth_to_depth(source_inv_depth[i], voxel_rendered_depth[i], mask_for_align[i]) for i in range(B*N)]
+    #     rectified_depth = torch.stack(rectified_depth)
+    #     rectified_depth = torch.where(source_inv_depth > 0, rectified_depth, 0)
+    #     rectified_depth = rectified_depth.view(B, N, H, W, 1)
 
-        return rectified_depth
+    #     return rectified_depth

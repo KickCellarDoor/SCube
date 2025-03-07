@@ -1,0 +1,126 @@
+include_configs:
+  - ../train/gsm/gsm.yaml
+  - ../train/gsm/backbone_pure_unet.yaml
+  - dataset.yaml
+
+name: 'scene-recon/waymo_wds'
+
+_fvdb_grid_type: 'vs02'
+finest_voxel_size_goal: vs02
+
+
+# data. we select (almost) static scenes for GSM training
+train_kwargs:
+  wds_scene_list_file: "../waymo_split/official_train_static_scene.json" 
+  fvdb_grid_type: ${_fvdb_grid_type}
+  finest_voxel_size_goal: ${finest_voxel_size_goal}
+val_kwargs:
+  wds_scene_list_file: "../waymo_split/official_val_static_scene.json"
+  fvdb_grid_type: ${_fvdb_grid_type}
+  finest_voxel_size_goal: ${finest_voxel_size_goal}
+test_kwargs:
+  wds_scene_list_file: "../waymo_split/official_val_static_scene.json"
+  fvdb_grid_type: ${_fvdb_grid_type}
+  finest_voxel_size_goal: ${finest_voxel_size_goal}
+
+_attr_subfolders: ['image_front', 'image_front_left', 'image_front_right', 
+                   'pose', 'pc_voxelsize_01', 'intrinsic', 
+                   'skymask_front', 'skymask_front_left', 'skymask_front_right',
+                   'dynamic_object_transformation', 'dynamic_object_points_canonical']
+
+_input_slect_ids: [0,1,2]
+_input_frame_offsets: [0]
+_sup_slect_ids: [0,1,2]
+_sup_frame_offsets: [0,7,15,22]
+_n_image_per_iter_sup: 8
+grid_crop_bbox_min: [0, -32, -6.4] # smaller to avoid OOM
+grid_crop_bbox_max: [81.92, 32, 19.2] # smaller to avoid OOM
+replace_all_car_with_cad: false # do not use CAD for appearance reconstruction training
+accumulate_grad_batches: 8
+
+# data loader
+duplicate_num: 1
+pin_memory: false
+batch_size: 1
+test_set_shuffle: false
+keep_surface_voxels: false
+
+# encoder module
+encoder:
+  resize_projection_input: false
+  encoder_modules: ['conv']
+
+  # conv encoder for image
+  conv_params:
+    n_filter_list: [3, 16, 32, 32]
+    n_stride_list: [1, 1, 2]
+    n_kernel_list: [3, 3, 3]
+    n_padding_list: [1, 1, 1]
+    n_residual_list: [false, true, true]
+    n_use_gn_list: [false, false, false]
+    conv_encoder_out_dim: 32
+
+# sky module
+use_skybox: true
+skybox_target: 'panorama_full'
+skybox_net: 'identity'
+skybox_feature_source: 'conv'
+skybox_resolution: 512
+skybox_forward_sky_only: false # ! forward the whole image
+model_midground: false
+
+# backbone module (all in model.yaml)
+
+# renderer
+renderer:
+  target: 'FeatureRenderer'
+  decoder_for_sky_only: true # ! do not decode the foreground (that is from 3DGS)
+  head:
+    target: 'ResConvHead'
+    params:
+      n_residual_block: [true, true, false]
+      n_filter_list: [32, 16, 16, 3]
+      n_upsample_list: [false, false, false]
+      n_downsample_list: [false, false, false]
+
+rasterizing_downsample: 2 # saying to original resolution
+
+# loss
+log_gaussian_stats: true
+only_sup_foreground: false # ! foreground and background together
+render_target_is_object: false 
+
+# overwrite ../train/gsm/backbone_pure_unet.yaml
+backbone:
+  params:
+    lifter_params:
+      img_feature_source: conv
+      img_in_dim: 32
+      voxel_out_dim: 32
+
+    img_feature_source: conv
+    in_channels: 32
+    num_blocks: 3 
+    f_maps: 32
+    f_maps_2d: 32
+    neck_dense_type: "UNCHANGED"
+    neck_bound: [128, 128, 32] # ! useless
+    use_attention: false
+    gs_enhanced: "original"
+    gs_free_space: ${gs_free_space}
+    gsplat_upsample: 3
+    occ_upsample: 1 # subdivide 2x2x2
+    max_scaling: 0.5
+    max_return: 2
+    feature_pooling_2d: "max"
+
+
+render_weight: 1.0 
+alpha_weight: 1
+perceptual_weight: 0.5
+perceptual_start_epoch: 1
+use_ssim_loss: true
+perceputal_resize_height: 640
+supervise_image_resize: [640, 960]
+
+model: gsm

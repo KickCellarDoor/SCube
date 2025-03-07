@@ -25,6 +25,7 @@ from scube.utils.voxel_util import compatible_fvdb_cat
 from scube.data.base import DatasetSpec as DS
 from scube.modules.gsm_modules.encoder.modules.dinov2_encoder import DinoWrapper
 from scube.modules.gsm_modules.encoder.modules.conv_encoder import ConvEncoder
+from scube.modules.gsm_modules.encoder.modules.dav2_encoder import DAV2Encoder
 
 class UnifiedEncoder(nn.Module):
     def __init__(self, hparams):
@@ -41,6 +42,8 @@ class UnifiedEncoder(nn.Module):
             self.encoders['conv'] = ConvEncoder(self.hparams.encoder.conv_params)
         if 'dino' in encoder_modules:
             self.encoders['dino'] = DinoWrapper(self.hparams.encoder.dino_params)
+        if 'dav2' in encoder_modules:
+            self.encoders['dav2'] = DAV2Encoder(self.hparams.encoder.dav2_params)
 
 
     def resize_reshape_projection_input(self, input_image, input_sky_mask, input_effective_mask, intrinsics):

@@ -277,7 +277,7 @@ class UnifiedLoss(nn.Module):
                 gt_depths = torch.stack(batch[DS.IMAGES_DEPTH_ANYTHING_V2_DEPTH_INV], dim=0)
                 gt_depths_is_inv = True
             elif self.hparams.sup_depth_type == 'voxel_depth':
-                gt_depths = batch[DS.IMAGES_DEPTH_VOXEL]
+                gt_depths = torch.stack(batch[DS.IMAGES_DEPTH_VOXEL])
                 gt_depths_is_inv = False
             else:
                 raise ValueError(f"Unknown depth type: {self.hparams.sup_depth_type}")

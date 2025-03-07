@@ -19,7 +19,7 @@ add_road_line_to_GT: false
 replace_all_car_with_cad: true
 
 train_dataset: WaymoWdsDataset
-train_val_num_workers: 16
+train_val_num_workers: 24
 train_kwargs:
   split: train
   wds_root_url: ${_wds_root_url}

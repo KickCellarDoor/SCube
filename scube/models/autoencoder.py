@@ -145,11 +145,11 @@ class Model(BaseModel):
         pass
 
     def train_val_step(self, batch, batch_idx, is_val):
-        if batch_idx % 1 == 0:
-            # Squeeze memory really hard :)
-            # This is a trade-off between memory and speed
-            gc.collect()
-            torch.cuda.empty_cache()
+        # if batch_idx % 1 == 0:
+        #     # Squeeze memory really hard :)
+        #     # This is a trade-off between memory and speed
+        #     gc.collect()
+        #     torch.cuda.empty_cache()
 
         out = {'idx': batch_idx}
         out = self(batch, out)

@@ -123,7 +123,7 @@ class FeatureRenderer(nn.Module):
             batch_rendered_depth.append(render_depths)
 
         
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         # stack for batch
         renderer_output.update({'pd_images': torch.stack(batch_rendered_images, dim=0)})
         renderer_output.update({'pd_images_fg': torch.stack(batch_rendered_images_fg, dim=0)})
@@ -132,6 +132,7 @@ class FeatureRenderer(nn.Module):
 
         return renderer_output
 
+    @torch.autocast(device_type='cuda', dtype=torch.float32)
     def forward(self, batch: dict, network_output: dict, skybox) -> dict:
         rasterizing_params = self.prepare_rasterizing_params(batch)
         renderer_output = self.gsplat_render(rasterizing_params, network_output, skybox)

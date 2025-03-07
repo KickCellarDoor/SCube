@@ -42,6 +42,7 @@ if version.parse(pl.__version__) > version.parse('1.8.0'):
 else:
     from pytorch_lightning.callbacks.base import Callback
 
+torch.set_float32_matmul_precision('high')
 
 class CopyModelFileCallback(Callback):
     def __init__(self):
@@ -97,8 +98,8 @@ def determine_usable_gpus():
     # Mismatched/missing CVD setting & #gpus, reset.
     gpu_states = exp.get_gpu_status("localhost")
     # temporally remove this to run multiple experiments on the same machine
-    available_gpus = [t for t in gpu_states if t.gpu_mem_usage < 0.2 and t.gpu_compute_usage < 0.2]
-    # available_gpus = [t for t in gpu_states]
+    # available_gpus = [t for t in gpu_states if t.gpu_mem_usage < 0.2 and t.gpu_compute_usage < 0.2]
+    available_gpus = [t for t in gpu_states]
 
     if len(available_gpus) == 0:
         print("You cannot use GPU. Everything is full.")
@@ -185,7 +186,7 @@ if __name__ == '__main__':
         if not os.path.exists(program_args.wandb_base):
             os.makedirs(program_args.wandb_base)
             
-        WANDB_USER_NAME = 'nvidia-toronto'
+        WANDB_USER_NAME = 'kickcellardoor-university-of-waterloo'
         wname = program_args.wname
         sep_pos = str(model_args.name).find('/')
         project_name = model_args.name[:sep_pos]

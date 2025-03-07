@@ -1,0 +1,9 @@
+backbone:
+  target: "Pure2DUnet"
+  params:
+    n_channels: 36 # 32 (depthanything features) + 3 (rgb) + 1 (depth)
+    n_classes: 24 # 2 gaussians 2 x 12
+    bilinear: false
+    gsplat_upsample: 2
+    znear: 0.5
+    zfar: 300

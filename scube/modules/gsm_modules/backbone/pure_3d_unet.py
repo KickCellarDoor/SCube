@@ -552,7 +552,7 @@ class Pure3DUnet(nn.Module):
                 for bidx in range(grid.grid_count):
                     cur_grid = grid[bidx]
                     image_features = img_features_batch[bidx] # N, C, H, W
-                    torch.cuda.empty_cache()
+                    # torch.cuda.empty_cache()
 
                     occ_front_voxel_mask, occ_front_per_camera = \
                         get_occ_front_voxel(

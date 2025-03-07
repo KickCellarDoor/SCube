@@ -1,4 +1,5 @@
 import time
+import pytorch3d
 
 import fvdb
 import numpy as np
@@ -18,7 +19,7 @@ def single_semantic_voxel_to_mesh(voxel_ijk, voxel_size = 0.1, voxel_origin = [0
     
     return cube_v, cube_f
 
-def get_distance_from_voxel(camera_poses, intrinsics, grid):
+def get_distance_from_voxel(camera_poses, intrinsics, grid, return_depth=False):
     """
     Args:
         camera_poses: torch.tensor
@@ -48,7 +49,22 @@ def get_distance_from_voxel(camera_poses, intrinsics, grid):
     distance_map = torch.zeros((N, H, W)).to(distance.device)
     distance_map[pixel_hit > 0] = distance
 
-    return distance_map.unsqueeze(-1)
+    if return_depth:
+        local_forward = torch.tensor([0, 0, 1]).to(camera_poses).reshape((1, 1, 1, 3, 1))
+
+        # Multiply the rotation matrix by the local forward vector.
+        # This transforms the vector into world space.
+        world_forward = camera_poses[:, None, None, :3, :3] @ local_forward
+        world_forward = world_forward.squeeze(-1)
+        # Normalize the result to create a unit vector.
+        norm = torch.linalg.norm(world_forward, dim=-1, keepdim=True)
+        world_forward /= norm
+
+        cos_d = torch.nn.functional.cosine_similarity(world_forward, rays_d, dim=-1)
+
+        return distance_map.unsqueeze(-1), (distance_map * cos_d).unsqueeze(-1)
+    else:
+        return distance_map.unsqueeze(-1)
 
 
 def get_mask_as_alpha_gt(camera_poses, intrinsics, grid):

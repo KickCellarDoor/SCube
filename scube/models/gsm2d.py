@@ -22,6 +22,7 @@ from fvdb import GridBatch, JaggedTensor
 from loguru import logger
 from pycg import exp
 from icecream import ic
+from einops import rearrange
 
 from scube.data import build_dataset
 from scube.data.base import DatasetSpec as DS
@@ -29,16 +30,18 @@ from scube.data.base import list_collate
 from scube.models.base_model import BaseModel
 
 from scube.modules.gsm_modules.encoder.unified_encoder import UnifiedEncoder
-from scube.modules.gsm_modules.backbone import Pure3DUnet
+from scube.modules.gsm_modules.backbone import Pure3DUnet, Pure2DUnet
 from scube.modules.gsm_modules.renderer import FeatureRenderer, RGBRenderer
 from scube.modules.gsm_modules.loss.unified_loss import UnifiedLoss
 from scube.modules.sky import SkyboxPanoramaFull, SkyboxNull, convert_to_camel_case
 
 from scube.modules.gsm_modules.hparams import hparams_handler
 from scube.modules.render.gsplat_renderer import IsoTransform, PinholeCamera
-from scube.utils.voxel_util import generate_grid_mask_for_batch_data, keep_surface_voxels, prepare_semantic_jagged_tensor
+from scube.utils.voxel_util import generate_grid_mask_for_batch_data, keep_surface_voxels, prepare_semantic_jagged_tensor, get_distance_from_voxel
 from scube.utils.voxel_util import clip_batch_grid, coarsen_batch_grid 
 from scube.utils.depth_util import vis_depth
+from scube.utils.common_util import mask_image_patches
+from scube.utils.render_util import create_rays_from_intrinsic_torch_batch
 
 def lambda_lr_wrapper(it, lr_config, batch_size, accumulate_grad_batches=1):
     return max(
@@ -54,16 +57,36 @@ class Model(BaseModel):
             self.skybox = eval("Skybox" + convert_to_camel_case(self.hparams.skybox_target))(self.hparams)
         else:
             self.skybox = SkyboxNull(hparams)
-        self.backbone = eval(self.hparams.backbone.target)(**self.hparams.backbone.params)
+        self.backbone = eval(self.hparams.backbone.target)(**self.hparams.backbone.params) 
         self.renderer = eval(self.hparams.renderer.target)(self.hparams)
         self.loss = UnifiedLoss(self.hparams)
 
-    def forward(self, batch, update_grid_mask=True):
-        self.voxel_preprocess(batch, update_grid_mask=update_grid_mask)
+    def forward(self, batch, update_grid_mask=True, update_grid_distance=True):
+        self.voxel_preprocess(batch, update_grid_mask=update_grid_mask, update_grid_distance=update_grid_distance)
         imgenc_output = self.img_encoder(batch)
         skyenc_output = self.skybox.encode_sky_feature(batch, imgenc_output)
 
-        network_output = self.backbone(batch, imgenc_output)
+        images = torch.stack(batch[DS.IMAGES_INPUT])
+        depth = torch.stack(batch[DS.IMAGES_INPUT_DEPTH])
+
+        depth = torch.clamp(depth - self.hparams.znear, min=0, max=self.hparams.zfar - self.hparams.znear) / (self.hparams.zfar - self.hparams.znear) 
+
+        masked_depth = mask_image_patches(depth, P=16, p_mask=0.5)
+        target_h, target_w = images.shape[2], images.shape[3]
+
+        dav2_features = rearrange(imgenc_output['dav2'], 'b n c h w -> (b n) c h w')
+
+        images = rearrange(images, 'b n h w c -> (b n) c h w')
+        masked_depth = rearrange(masked_depth, 'b n h w c -> (b n) c h w')
+        dav2_features = F.interpolate(dav2_features, (target_h, target_w), 
+                                        mode='bilinear', align_corners=False, antialias=False)
+
+        features = torch.cat(
+            [dav2_features, images, masked_depth],
+            dim=1
+        )
+
+        network_output = self.backbone(features, batch)
         network_output = self.skybox(skyenc_output, network_output)
 
         if not self.training:
@@ -262,7 +285,7 @@ class Model(BaseModel):
                           num_workers=0, collate_fn=self.get_collate_fn())
 
 
-    def voxel_preprocess(self, batch, update_grid_mask=True):
+    def voxel_preprocess(self, batch, update_grid_mask=True, update_grid_distance=False):
         self.generate_fvdb_grid_on_the_fly(batch)
         prepare_semantic_jagged_tensor(batch)
         if self.hparams.clip_input_grid:
@@ -274,8 +297,26 @@ class Model(BaseModel):
 
         if update_grid_mask:
             generate_grid_mask_for_batch_data(batch, self.hparams.use_high_res_grid_for_alpha_mask)
-        
+        if update_grid_distance:
+            if DS.IMAGES_INPUT_POSE in batch:
+                B = len(batch[DS.IMAGES_INPUT_POSE])
+                batch[DS.IMAGES_INPUT_DEPTH] = []
+                for i in range(B):
+                    poses = batch[DS.IMAGES_INPUT_POSE][i]
+                    intrinsics = batch[DS.IMAGES_INPUT_INTRINSIC][i]
+                    grid = batch[DS.INPUT_PC][i]
+                    distance, depth = get_distance_from_voxel(poses, intrinsics, grid, return_depth=True)
+                    batch[DS.IMAGES_INPUT_DEPTH].append(distance)
 
+            if DS.IMAGES_POSE in batch:
+                B = len(batch[DS.IMAGES_POSE])
+                batch[DS.IMAGES_DEPTH_VOXEL] = []
+                for i in range(B):
+                    poses = batch[DS.IMAGES_POSE][i]
+                    intrinsics = batch[DS.IMAGES_INTRINSIC][i]
+                    grid = batch[DS.INPUT_PC][i]
+                    distance, depth = get_distance_from_voxel(poses, intrinsics, grid, return_depth=True)
+                    batch[DS.IMAGES_DEPTH_VOXEL].append(distance)
 
     def state_dict(self, **kwargs):
         # remove lpips_loss

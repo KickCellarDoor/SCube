@@ -1,0 +1,104 @@
+include_configs:
+  - ../train/gsm/gsm2d.yaml
+  - ../train/gsm/backbone_pure_unet2d.yaml
+  - dataset.yaml
+
+name: 'scene-recon/waymo_wds'
+
+_fvdb_grid_type: 'vs02'
+finest_voxel_size_goal: vs02
+
+# data. we select (almost) static scenes for GSM training
+train_kwargs:
+  wds_scene_list_file: "../waymo_split/official_train_w_dynamic_w_ego_motion_gt_30m_good_voxel.json" 
+  fvdb_grid_type: ${_fvdb_grid_type}
+  finest_voxel_size_goal: ${finest_voxel_size_goal}
+val_kwargs:
+  wds_scene_list_file: "../waymo_split/official_val_w_dynamic_w_ego_motion_gt_30m_good_voxel.json"
+  fvdb_grid_type: ${_fvdb_grid_type}
+  finest_voxel_size_goal: ${finest_voxel_size_goal}
+test_kwargs:
+  wds_scene_list_file: "../waymo_split/official_val_w_dynamic_w_ego_motion_gt_30m_good_voxel.json"
+  fvdb_grid_type: ${_fvdb_grid_type}
+  finest_voxel_size_goal: ${finest_voxel_size_goal}
+
+_attr_subfolders: ['image_front', 'image_front_left', 'image_front_right', 
+                   'pose', 'pc_voxelsize_01', 'intrinsic', 
+                   'skymask_front', 'skymask_front_left', 'skymask_front_right',
+                   'dynamic_object_transformation', 'dynamic_object_points_canonical']
+
+_input_slect_ids: [0,1,2]
+_input_frame_offsets: [0]
+_sup_slect_ids: [0,1,2]
+_sup_frame_offsets: [0,7,15,22]
+_n_image_per_iter_sup: 8
+grid_crop_bbox_min: [0, -32, -6.4] # smaller to avoid OOM
+grid_crop_bbox_max: [81.92, 32, 19.2] # smaller to avoid OOM
+replace_all_car_with_cad: false # do not use CAD for appearance reconstruction training
+accumulate_grad_batches: 8
+
+# data loader
+duplicate_num: 1
+pin_memory: false
+batch_size: 2
+test_set_shuffle: false
+keep_surface_voxels: false
+
+# encoder module
+encoder:
+  resize_projection_input: false
+  encoder_modules: ['dav2']
+  dav2_params:
+    depth_anything_model: depth-anything/Depth-Anything-V2-Large-hf
+    model_freeze: true
+    target_input_size: [560, 952]
+    out_dim_list: [128, 64, 32]
+    out_upsample_list: [false, false, true]
+    out_downsample_list: [false, false, false]
+    out_use_gn_list: [false, false, false]
+
+znear: 0.5
+zfar: 300
+
+backbone:
+  target: "Pure2DUnet"
+  params:
+    scale_factor: 0.5
+    gsplat_upsample: 2
+    znear: ${znear}
+    zfar: ${zfar}
+
+# sky module
+use_skybox: false
+skybox_target: 'panorama_full'
+skybox_net: 'identity'
+skybox_feature_source: 'conv'
+skybox_resolution: 512
+skybox_forward_sky_only: false # ! forward the whole image
+model_midground: true
+
+# backbone module (all in model.yaml)
+
+# renderer
+renderer:
+  target: 'RGBRenderer'
+
+
+rasterizing_downsample: 2 # saying to original resolution
+
+# loss
+log_gaussian_stats: true
+only_sup_foreground: false # ! foreground and background together
+render_target_is_object: false 
+use_sup_depth: true
+sup_depth_type: voxel_depth
+
+render_weight: 1.0 
+alpha_weight: 1
+perceptual_weight: 0.5
+perceptual_start_epoch: 1
+use_ssim_loss: true
+perceputal_resize_height: 640
+supervise_image_resize: [640, 960]
+
+model: gsm2d
